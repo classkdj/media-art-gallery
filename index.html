@@ -58,8 +58,6 @@
     </div>
 
     <script>
-        // --- JavaScript 데이터 로드 및 동적 렌더링 로직 (최종 개선 버전) ---
-
         // 1. URL 매개변수 읽기
         const params = new URLSearchParams(window.location.search);
         const sessionCode = params.get('class');
@@ -70,14 +68,13 @@
         const gallery = document.getElementById('art-gallery');
         const loadingMessage = document.getElementById('loading-message');
 
-        // *************** [핵심 인덱스 정의] Google Sheet 컬럼 순서에 맞춤 (A=0, B=1...) ***************
-        const SESSION_CODE_INDEX = 1;  // B열: '해당 수업을 선택하세요.'
-        const TITLE_INDEX = 2;         // C열: '작품 제목을 쓰세요.'
-        const AUTHOR_INDEX = 3;        // D열: '만든 학생 이름을 모두 쓰세요. (예: 홍길동, 홍길순, ...)'
-        // E열 (인덱스 4)는 건너뜀
-        const IFRAME_INDEX = 5;        // F열: 'p5.js에서 iframe을 복사해서 붙여넣으세요. (파일>공유>첫번째 태그)'
-        const DESC_INDEX = 6;          // G열: '작품에 대한 설명을 쓰세요.'
-        // ******************************************************************************************
+        // *************** [최종 키 정의] Google Sheet에 수정한 영문 헤더 이름에 맞춰야 합니다. ***************
+        const SESSION_CODE_KEY = 'class_code';
+        const TITLE_KEY = 'title';
+        const AUTHOR_KEY = 'author';
+        const IFRAME_KEY = 'iframe_code'; 
+        const DESC_KEY = 'description'; 
+        // ****************************************************************************************************
 
         // URL 매개변수 유효성 검사
         if (!sessionCode || !sheetCSVUrl) {
@@ -101,96 +98,91 @@
                 })
                 .then(csvText => {
                     loadingMessage.style.display = 'none';
-                    
-                    // ********* [디버깅 추가: CSV 길이 확인] *********
-                    console.log("--- 1. CSV 텍스트 길이 ---");
-                    console.log("길이:", csvText.length);
-                    // *********************************
-
                     const artworks = parseCSV(csvText);
                     renderGallery(artworks);
                 })
                 .catch(error => {
                     console.error('데이터 로딩 오류:', error);
-                    // HINT: 90% 이상은 CSV 파싱 실패 또는 인덱스 오류입니다.
-                    loadingMessage.innerHTML = '⚠️ **오류:** 작품 데이터 로딩에 실패했습니다. (CSV 주소, 네트워크 문제, 혹은 CSV 파싱 오류)';
+                    loadingMessage.innerHTML = '⚠️ **오류:** 작품 데이터 로딩에 실패했습니다. (CSV 주소 또는 네트워크 오류)';
                 });
         }
 
         /**
-         * CSV 텍스트를 파싱하여 배열 배열 (2차원 배열)로 변환합니다. (최종 간소화 버전)
+         * CSV 텍스트를 파싱하여 객체 배열로 변환합니다. (안전한 영문 헤더 기준)
          */
         function parseCSV(csvText) {
             const lines = csvText.trim().split('\n');
             if (lines.length <= 1) return [];
 
-            // 1. 헤더(첫 줄)를 제외하고 데이터만 처리
-            return lines.slice(1).map(line => {
-                try {
-                    // 2. 탭, 따옴표, 줄바꿈 등 복잡한 문자를 한 번에 제거하고 쉼표로 분리 (최대한 간소화)
-                    //    쉼표(,)를 기준으로 나누지만, 따옴표("...") 안의 쉼표는 무시하는 정규표현식 사용
-                    const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-                    
-                    // 3. 각 값의 앞뒤 공백 및 불필요한 따옴표 제거 후 반환
-                    return values.map(v => v.trim().replace(/^"|"$/g, ''));
-                } catch (e) {
-                    console.error("CSV 행 파싱 오류 발생:", e);
-                    return []; // 오류 발생 행은 빈 배열로 처리하여 건너뜀
+            // 1. 헤더 (첫 줄)를 키로 사용
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const data = [];
+
+            // 2. 헤더를 기반으로 각 행을 객체로 변환
+            for (let i = 1; i < lines.length; i++) {
+                let currentLine = lines[i];
+                if (currentLine.trim() === '') continue;
+
+                const values = [];
+                let current = '';
+                let inQuote = false;
+                
+                // 복잡한 파싱 로직 (따옴표 처리)
+                for (let j = 0; j < currentLine.length; j++) {
+                    const char = currentLine[j];
+                    if (char === '"') {
+                        inQuote = !inQuote;
+                    } else if (char === ',' && !inQuote) {
+                        values.push(current.trim().replace(/^"|"$/g, ''));
+                        current = '';
+                    } else {
+                        current += char;
+                    }
                 }
-            }).filter(row => row.length > 1); // 유효한 행만 필터링
+                values.push(current.trim().replace(/^"|"$/g, '')); // 마지막 필드
+
+                if (values.length === headers.length) {
+                    let entry = {};
+                    headers.forEach((header, index) => {
+                        entry[header] = values[index];
+                    });
+                    data.push(entry);
+                } else {
+                    console.warn("CSV 파싱 경고: 헤더와 값의 개수가 일치하지 않는 행이 발견되었습니다.", currentLine);
+                }
+            }
+            return data;
         }
 
 
-  
-        // renderGallery 함수 내부 (맨 위)
+        /**
+         * 필터링된 데이터를 갤러리에 렌더링합니다.
+         */
         function renderGallery(data) {
             
-            // ********* [디버깅 코드 수정] *********
-            console.log("--- 3. URL에서 가져온 세션 코드 (필터링 기준) ---");
-            console.log("기준 코드:", sessionCode);
+            // 🚨 필터링: 안전한 영문 키를 사용하여 세션 코드를 비교합니다.
+            const filteredArtworks = data.filter(item => item[SESSION_CODE_KEY] && item[SESSION_CODE_KEY].trim() === sessionCode);
             
-            if (data.length > 0) {
-                // 첫 번째 유효한 데이터 행의 B열 (인덱스 1) 값 출력
-                console.log("--- 4. CSV 데이터의 첫 번째 행/두 번째 열 값 (실제 데이터) ---");
-                // data[0]은 첫 번째 데이터 행, [SESSION_CODE_INDEX]는 B열
-                console.log("실제 코드:", data[0][SESSION_CODE_INDEX]); 
-            } else {
-                console.log("--- 4. CSV 데이터에 유효한 행이 없습니다. (파싱 실패) ---");
-            }
-            // *********************************
-        
-            // 🚨 필터링: 컬럼 인덱스 1 (B열)을 사용하여 세션 코드를 비교합니다. (안전)
-            const filteredArtworks = data.filter(row => row[SESSION_CODE_INDEX] && row[SESSION_CODE_INDEX].trim() === sessionCode);
-                        
             if (filteredArtworks.length === 0) {
+                // 이 메시지가 뜨면 띄어쓰기 또는 재게시만 확인하면 됩니다.
                 gallery.innerHTML = `<p style="text-align: center; color: #ff5722;">😭 **오류:** '${sessionCode}'에 해당하는 작품이 데이터베이스에 없습니다.<br>1. 세션 코드 띄어쓰기(공백)를 확인해주세요.<br>2. Google Sheet의 데이터가 최신 상태인지 (재게시) 확인해주세요.</p>`;
                 return;
             }
-            
-            // ********* [디버깅 추가: 필터링 성공 메시지] *********
-            console.log(`--- 5. 필터링 성공: ${filteredArtworks.length}개의 작품 로드 시도 ---`);
-            // *******************************************************
 
-
-            filteredArtworks.forEach(row => {
+            filteredArtworks.forEach(art => {
                 const artPiece = document.createElement('div');
                 artPiece.className = 'art-piece';
                 artPiece.style.width = `${frameWidth}px`; 
 
-                // iframe 태그에서 src 주소 추출 (F열, 인덱스 5)
-                const iframeFullText = row[IFRAME_INDEX] || '';
+                // iframe 태그 (IFRAME_KEY)에서 src 주소 추출 
+                const iframeFullText = art[IFRAME_KEY] || '';
                 
-                // --- 핵심 수정: 정규식 재확인 및 문자열 정리 ---
-                // 1. 문자열 앞뒤의 공백/줄바꿈 제거
+                // --- 핵심: 유연한 정규식으로 src 주소 추출 ---
                 const cleanIframeText = iframeFullText.trim(); 
-                
-                // 2. /src\s*=\s*['"]([^'"]+)['"]/i  <-- 더욱 강력하고 유연한 정규식
                 const iframeMatch = cleanIframeText.match(/src\s*=\s*['"]([^'"]+)['"]/i);
                 
                 if (!iframeMatch || !iframeMatch[1]) {
-                    // 오류 메시지 수정: 콘솔에서 작품 제목 출력
-                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${row[TITLE_INDEX]}. 인덱스 ${IFRAME_INDEX}의 데이터 형태를 확인하세요.`);
-                    // *****************************************
+                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${art[TITLE_KEY]}. 제출 데이터 확인 필요.`);
                     return; 
                 } 
                 
@@ -198,9 +190,9 @@
                 artPiece.dataset.url = p5jsSrcUrl; 
                 
                 // 렌더링 정보 설정
-                const artTitle = row[TITLE_INDEX] || '제목 없음';
-                const artAuthor = row[AUTHOR_INDEX] || '작가 정보 없음';
-                const artDesc = (row[DESC_INDEX] || '').substring(0, 50); 
+                const artTitle = art[TITLE_KEY] || '제목 없음';
+                const artAuthor = art[AUTHOR_KEY] || '작가 정보 없음';
+                const artDesc = (art[DESC_KEY] || '').substring(0, 50); 
                 
                 // HTML 동적 생성
                 const iframeHtml = `
@@ -214,7 +206,7 @@
                         sandbox="allow-scripts allow-pointer-lock allow-same-origin allow-popups" 
                     ></iframe>
                     <h3>${artTitle}</h3>
-                    <p>작가: ${artAuthor} | ${artDesc}${row[DESC_INDEX] && row[DESC_INDEX].length > 50 ? '...' : ''}</p>
+                    <p>작가: ${artAuthor} | ${artDesc}${art[DESC_KEY] && art[DESC_KEY].length > 50 ? '...' : ''}</p>
                 `;
 
                 artPiece.innerHTML = iframeHtml;
@@ -225,9 +217,9 @@
             activateFeatures();
         }
         
-        // --- 지연 로드(Lazy Loading) 및 확대 보기 기능 함수 ---
+        // --- 지연 로드(Lazy Loading) 및 확대 보기 기능 함수 (변경 없음) ---
         function activateFeatures() {
-            // Intersection Observer 설정 (지연 로드)
+            // ... (기능 유지)
             const lazyArtFrames = document.querySelectorAll('.art-frame');
             const observer = new IntersectionObserver((entries, observer) => {
                 entries.forEach(entry => {
@@ -248,7 +240,6 @@
                 observer.observe(iframe);
             });
 
-            // 작품 확대 보기 기능 (새 창 팝업)
             document.querySelectorAll('.art-piece').forEach(piece => {
                 piece.addEventListener('click', function() {
                     const p5jsUrl = this.dataset.url;
