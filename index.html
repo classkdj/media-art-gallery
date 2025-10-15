@@ -99,7 +99,15 @@
                     }
                     return response.text();
                 })
+                // loadData 함수 내부의 .then(csvText => { ... }) 부분
                 .then(csvText => {
+                    // ********* [디버깅 추가] *********
+                    console.log("--- 1. CSV 텍스트 길이 ---");
+                    console.log("길이:", csvText.length);
+                    console.log("--- 2. CSV 텍스트 미리보기 (앞 200자) ---");
+                    console.log(csvText.substring(0, 200));
+                    // *********************************
+                
                     loadingMessage.style.display = 'none';
                     const artworks = parseCSV(csvText);
                     renderGallery(artworks);
