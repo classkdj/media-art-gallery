@@ -1,3 +1,229 @@
-<html>
-  
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 미디어아트 융합교육 웹전시 플랫폼</title>
+    <style>
+        /* 1. 기본 스타일 */
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
+        header { background-color: #333; color: white; padding: 20px; text-align: center; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
+        #loading-message { text-align: center; color: #555; padding: 50px; }
+
+        /* 2. 작품 갤러리 그리드 스타일 */
+        #art-gallery {
+            display: flex;
+            flex-wrap: wrap; /* 공간이 부족하면 자동으로 줄바꿈 */
+            justify-content: center; /* 작품을 중앙 정렬 */
+            gap: 25px; /* 작품 간 간격 */
+            padding: 20px 0;
+        }
+        .art-piece {
+            /* 이 너비는 JavaScript에서 지정된 width에 맞춰 동적으로 변경됩니다. */
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            text-align: center;
+            cursor: pointer; /* 클릭 가능하다는 표시 */
+            transition: transform 0.2s;
+        }
+        .art-piece:hover {
+            transform: translateY(-5px); /* 마우스 호버 시 살짝 떠오르는 효과 */
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        .art-piece h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #007bff; }
+        .art-piece p { font-size: 0.9em; color: #666; margin: 5px 10px 10px 10px; }
+
+        /* 3. iframe 스타일 (통일된 규격 확보) */
+        .art-frame {
+            border: none;
+            display: block;
+            margin: 0 auto;
+            /* width와 height는 JavaScript에서 URL 매개변수 값으로 설정됩니다. */
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="page-title">AI 미디어아트 웹전시 (로딩 중...)</h1>
+        <p id="class-info">GitHub Pages를 이용한 저비용·고확장 융합교육 전시 플랫폼</p>
+    </header>
+
+    <div class="container">
+        <div id="loading-message">작품 데이터를 불러오는 중입니다...</div>
+        <div id="art-gallery">
+            </div>
+    </div>
+
+    <script>
+        // --- 2-3, 2-4. JavaScript 데이터 로드 및 동적 렌더링 로직 ---
+
+        // 1. URL 매개변수 읽기
+        const params = new URLSearchParams(window.location.search);
+        const sessionCode = params.get('class'); // 수업 세션 코드 (필터링 키)
+        const frameWidth = params.get('width') || 500; // 작품 가로 규격 (기본값 500)
+        const frameHeight = params.get('height') || 400; // 작품 세로 규격 (기본값 400)
+        const sheetCSVUrl = params.get('sheet'); // 구글 시트 CSV 주소
+
+        const gallery = document.getElementById('art-gallery');
+        const loadingMessage = document.getElementById('loading-message');
+
+        // URL 매개변수 유효성 검사
+        if (!sessionCode || !sheetCSVUrl) {
+            loadingMessage.innerHTML = '⚠️ **오류:** URL에 `class` (세션 코드) 또는 `sheet` (CSV 주소) 매개변수가 누락되었습니다. 교사에게 문의하세요.';
+        } else {
+            // 페이지 제목 업데이트
+            document.getElementById('page-title').innerText = `${sessionCode} 작품 전시회`;
+            document.getElementById('class-info').innerText = '클릭하면 작품을 확대하여 감상할 수 있습니다.';
+            loadData(sheetCSVUrl);
+        }
+
+        /**
+         * 2-3. Google Sheets CSV 데이터를 불러와서 파싱합니다.
+         * Intersection Observer를 사용한 Lazy Loading은 2-5 단계에서 추가됩니다.
+         */
+        function loadData(url) {
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP 오류! 상태: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(csvText => {
+                    loadingMessage.style.display = 'none';
+                    const artworks = parseCSV(csvText);
+                    renderGallery(artworks);
+                })
+                .catch(error => {
+                    console.error('데이터 로딩 오류:', error);
+                    loadingMessage.innerHTML = '⚠️ **오류:** 작품 데이터 로딩에 실패했습니다. (CSV 주소 또는 네트워크 문제)';
+                });
+        }
+
+        /**
+         * CSV 텍스트를 파싱하여 객체 배열로 변환합니다.
+         * (구글 시트의 첫 번째 행을 헤더로 가정합니다.)
+         */
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            if (lines.length === 0) return [];
+            
+            // 첫 줄을 헤더(열 이름)로 사용
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                // CSV 파싱은 복잡할 수 있으나, 여기서는 간단히 구현합니다.
+                const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
+                if (values.length !== headers.length) continue; 
+
+                let entry = {};
+                headers.forEach((header, index) => {
+                    entry[header] = values[index];
+                });
+                data.push(entry);
+            }
+            return data;
+        }
+
+
+        /**
+         * 2-4. 필터링된 데이터를 갤러리에 렌더링합니다.
+         */
+        function renderGallery(data) {
+            // 🚨 필터링 키: CSV 열 이름은 "수업 세션 코드/이름"과 정확히 일치해야 합니다!
+            const sessionKey = '수업 세션 코드/이름'; 
+            const iframeKey = 'p5.js <iframe> 태그';
+
+            const filteredArtworks = data.filter(item => item[sessionKey] === sessionCode);
+            
+            if (filteredArtworks.length === 0) {
+                gallery.innerHTML = `<p style="text-align: center; color: #ff5722;">😭 **오류:** '${sessionCode}'에 해당하는 작품이 데이터베이스에 없습니다. 세션 코드를 확인해주세요.</p>`;
+                return;
+            }
+
+            filteredArtworks.forEach(art => {
+                const artPiece = document.createElement('div');
+                artPiece.className = 'art-piece';
+                artPiece.style.width = `${frameWidth}px`; // 컨테이너 너비 설정
+
+                // iframe 태그에서 src 주소 추출 (작품 확대 보기에 사용)
+                const iframeMatch = art[iframeKey].match(/src="([^"]+)"/);
+                if (!iframeMatch || !iframeMatch[1]) return; // iframe 태그가 없으면 건너뜀
+                
+                const p5jsSrcUrl = iframeMatch[1];
+                artPiece.dataset.url = p5jsSrcUrl; // 3-1. 확대 보기를 위해 URL 저장
+                
+                // 2-4. 통일된 규격의 iframe HTML 생성 (지연 로드를 위해 src 대신 data-src 사용)
+                const iframeHtml = `
+                    <iframe 
+                        class="art-frame" 
+                        data-src="${p5jsSrcUrl}" 
+                        width="${frameWidth}" 
+                        height="${frameHeight}" 
+                        frameborder="0"
+                        allowfullscreen 
+                        sandbox="allow-scripts allow-pointer-lock allow-same-origin allow-popups" 
+                    ></iframe>
+                    <h3>${art['작품 제목']}</h3>
+                    <p>작가: ${art['학생 이름/번호']} | ${art['작품 설명/성찰 일지'].substring(0, 50)}...</p>
+                `;
+
+                artPiece.innerHTML = iframeHtml;
+                gallery.appendChild(artPiece);
+            });
+            
+            // 2-5. 지연 로드 (Lazy Loading) 및 3-1. 확대 보기 기능 활성화
+            activateFeatures();
+        }
+        
+        // --- 2-5. 지연 로드(Lazy Loading) 및 3-1. 확대 보기 기능 함수 ---
+        function activateFeatures() {
+            // 2-5. Intersection Observer 설정 (지연 로드)
+            const lazyArtFrames = document.querySelectorAll('.art-frame');
+            const observer = new IntersectionObserver((entries, observer) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const iframe = entry.target;
+                        // data-src의 값을 src로 이동시켜 로딩 시작
+                        if (iframe.dataset.src) {
+                            iframe.src = iframe.dataset.src;
+                            iframe.removeAttribute('data-src');
+                        }
+                        // 한 번 로드된 iframe은 관찰을 멈춥니다.
+                        observer.unobserve(iframe);
+                    }
+                });
+            }, {
+                rootMargin: '0px 0px 200px 0px', // 200px 미리 로드 (사용자 경험 개선)
+            });
+
+            lazyArtFrames.forEach(iframe => {
+                observer.observe(iframe);
+            });
+
+            // 3-1. 작품 확대 보기 기능 (새 창 팝업)
+            document.querySelectorAll('.art-piece').forEach(piece => {
+                piece.addEventListener('click', function() {
+                    const p5jsUrl = this.dataset.url;
+                    // 확대 창 크기는 갤러리 규격보다 크게 설정
+                    const popupWidth = Math.min(parseInt(frameWidth) + 300, 1200); 
+                    const popupHeight = Math.min(parseInt(frameHeight) + 200, 800);
+
+                    if (p5jsUrl) {
+                        window.open(
+                            p5jsUrl, 
+                            '_blank', 
+                            `width=${popupWidth},height=${popupHeight},scrollbars=yes,resizable=yes`
+                        );
+                    }
+                });
+            });
+        }
+    </script>
+</body>
 </html>
