@@ -68,13 +68,14 @@
         const gallery = document.getElementById('art-gallery');
         const loadingMessage = document.getElementById('loading-message');
 
-        // *************** [최종 키 정의] Google Sheet에 수정한 영문 헤더 이름에 맞춰야 합니다. ***************
-        const SESSION_CODE_KEY = 'class_code';
-        const TITLE_KEY = 'title';
-        const AUTHOR_KEY = 'author';
-        const IFRAME_KEY = 'iframe_code'; 
-        const DESC_KEY = 'description'; 
-        // ****************************************************************************************************
+        // ******************* 키 정의 변수 수정 (인덱스 기반) *******************
+                // A=0, B=1, C=2, D=3, E=4, F=5, G=6...
+                const SESSION_CODE_INDEX = 1;  
+                const TITLE_INDEX = 2;         
+                const AUTHOR_INDEX = 3;        
+                const IFRAME_INDEX = 5;        
+                const DESC_INDEX = 6;          
+        // **********************************************************************
 
         // URL 매개변수 유효성 검사
         if (!sessionCode || !sheetCSVUrl) {
@@ -155,15 +156,15 @@
         }
 
         /**
-         * 필터링된 데이터를 갤러리에 렌더링합니다. (오류 수정 버전)
+         * 필터링된 데이터를 갤러리에 렌더링합니다. (인덱스 기반 최종 수정)
          */
         function renderGallery(data) {
             
-            // 🚨 필터링: 안전한 영문 키를 사용하여 세션 코드를 비교합니다.
-            const filteredArtworks = data.filter(item => item[SESSION_CODE_KEY] && item[SESSION_CODE_KEY].trim() === sessionCode);
+            // 🚨 필터링: 컬럼 인덱스를 사용하여 세션 코드를 비교합니다.
+            const filteredArtworks = data.filter(row => row[SESSION_CODE_INDEX] && row[SESSION_CODE_INDEX].trim() === sessionCode);
             
             if (filteredArtworks.length === 0) {
-                gallery.innerHTML = `<p style="text-align: center; color: #ff5722;">😭 **오류:** '${sessionCode}'에 해당하는 작품이 데이터베이스에 없습니다.<br>1. 세션 코드 띄어쓰기(공백)를 확인해주세요.<br>2. Google Sheet의 데이터가 최신 상태인지 (재게시) 확인해주세요.</p>`;
+                // ... (오류 메시지 유지)
                 return;
             }
             
@@ -171,14 +172,13 @@
             console.log(`--- 필터링 성공: ${filteredArtworks.length}개의 작품 로드 시도 ---`);
             // *****************************************
 
-            filteredArtworks.forEach(art => { // *수정: art 변수 사용*
+            filteredArtworks.forEach(row => { // *수정: art 대신 row 변수 사용 (배열 접근)*
                 const artPiece = document.createElement('div');
                 artPiece.className = 'art-piece';
                 artPiece.style.width = `${frameWidth}px`; 
 
                 // iframe 태그에서 src 주소 추출 
-                // *수정: IFRAME_KEY를 사용*
-                const iframeFullText = art[IFRAME_KEY] || '';
+                const iframeFullText = row[IFRAME_INDEX] || ''; // *수정: row[IFRAME_INDEX] 사용*
                 
                 let p5jsSrcUrl = '';
                 
@@ -196,16 +196,17 @@
                     p5jsSrcUrl = cleanIframeText;
                 } else {
                     // 추출 실패: 다음 작품으로 건너뜀
-                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${art[TITLE_KEY]}. 제출 데이터 형태를 확인하세요.`);
+                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${row[TITLE_INDEX]}. 인덱스 ${IFRAME_INDEX}의 데이터 형태를 확인하세요.`);
                     return; 
                 } 
                 
                 artPiece.dataset.url = p5jsSrcUrl; 
                 
                 // 렌더링 정보 설정
-                const artTitle = art[TITLE_KEY] || '제목 없음';
-                const artAuthor = art[AUTHOR_KEY] || '작가 정보 없음';
-                const artDesc = (art[DESC_KEY] || '').substring(0, 50); 
+                // *수정: 인덱스를 사용*
+                const artTitle = row[TITLE_INDEX] || '제목 없음';
+                const artAuthor = row[AUTHOR_INDEX] || '작가 정보 없음';
+                const artDesc = (row[DESC_INDEX] || '').substring(0, 50); 
                 
                 // HTML 동적 생성
                 const iframeHtml = `
@@ -219,7 +220,7 @@
                         sandbox="allow-scripts allow-pointer-lock allow-same-origin allow-popups" 
                     ></iframe>
                     <h3>${artTitle}</h3>
-                    <p>작가: ${artAuthor} | ${artDesc}${art[DESC_KEY] && art[DESC_KEY].length > 50 ? '...' : ''}</p>
+                    <p>작가: ${artAuthor} | ${artDesc}${row[DESC_INDEX] && row[DESC_INDEX].length > 50 ? '...' : ''}</p>
                 `;
 
                 artPiece.innerHTML = iframeHtml;
