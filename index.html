@@ -1,29 +1,31 @@
 <script>
-        // --- 2-3, 2-4. JavaScript 데이터 로드 및 동적 렌더링 로직 ---
+        // --- 2-3, 2-4. JavaScript 데이터 로드 및 동적 렌더링 로직 (개선 버전) ---
 
         // 1. URL 매개변수 읽기
         const params = new URLSearchParams(window.location.search);
-        const sessionCode = params.get('class'); // 수업 세션 코드 (필터링 키)
-        const frameWidth = params.get('width') || 500; // 작품 가로 규격 (기본값 500)
-        const frameHeight = params.get('height') || 400; // 작품 세로 규격 (기본값 400)
-        const sheetCSVUrl = params.get('sheet'); // 구글 시트 CSV 주소
+        const sessionCode = params.get('class');
+        const frameWidth = params.get('width') || 500;
+        const frameHeight = params.get('height') || 400;
+        const sheetCSVUrl = params.get('sheet');
 
         const gallery = document.getElementById('art-gallery');
         const loadingMessage = document.getElementById('loading-message');
 
-        // *************** [수정된 부분] Google Sheet 헤더에 맞춤 ***************
-        const sessionKey = '해당 수업을 선택하세요.'; 
-        const iframeKey = 'p5.js에서 iframe을 복사해서 붙여넣으세요. (파일>공유>첫번째 태그)';
-        const titleKey = '작품 제목을 쓰세요.';
-        const authorKey = '만든 학생 이름을 모두 쓰세요. (예: 홍길동, 홍길순, ...)';
-        const descKey = '작품에 대한 설명을 쓰세요.';
+        // *************** [수정된 부분] 데이터베이스 컬럼 인덱스 정의 ***************
+        // Google Form 응답 시트의 컬럼 순서에 맞춥니다 (0부터 시작)
+        // A=0, B=1, C=2, D=3, E=4, F=5, G=6...
+        // 타임스탬프(0)
+        const SESSION_CODE_INDEX = 1;  // '해당 수업을 선택하세요.' (B열)
+        const TITLE_INDEX = 2;         // '작품 제목을 쓰세요.' (C열)
+        const AUTHOR_INDEX = 3;        // '만든 학생 이름을 모두 쓰세요.' (D열)
+        const IFRAME_INDEX = 5;        // 'p5.js에서 iframe을 복사해서 붙여넣으세요. (파일>공유>첫번째 태그)' (F열)
+        const DESC_INDEX = 6;          // '작품에 대한 설명을 쓰세요.' (G열)
         // *******************************************************************
-        
+
         // URL 매개변수 유효성 검사
         if (!sessionCode || !sheetCSVUrl) {
             loadingMessage.innerHTML = '⚠️ **오류:** URL에 `class` (세션 코드) 또는 `sheet` (CSV 주소) 매개변수가 누락되었습니다. 교사에게 문의하세요.';
         } else {
-            // 페이지 제목 업데이트
             document.getElementById('page-title').innerText = `${sessionCode} 작품 전시회`;
             document.getElementById('class-info').innerText = '클릭하면 작품을 확대하여 감상할 수 있습니다.';
             loadData(sheetCSVUrl);
@@ -47,34 +49,20 @@
                 })
                 .catch(error => {
                     console.error('데이터 로딩 오류:', error);
-                    loadingMessage.innerHTML = '⚠️ **오류:** 작품 데이터 로딩에 실패했습니다. (CSV 주소 또는 네트워크 문제)';
+                    loadingMessage.innerHTML = '⚠️ **오류:** 작품 데이터 로딩에 실패했습니다. (CSV 주소, 네트워크 문제, 혹은 CSV 파싱 오류)';
                 });
         }
 
         /**
-         * CSV 텍스트를 파싱하여 객체 배열로 변환합니다.
+         * CSV 텍스트를 파싱하여 배열 배열 (2차원 배열)로 변환합니다.
          */
         function parseCSV(csvText) {
             const lines = csvText.trim().split('\n');
-            if (lines.length === 0) return [];
-            
-            // 첫 줄을 헤더(열 이름)로 사용
-            // 쉼표로 구분된 CSV 헤더를 추출하고 따옴표 제거
-            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-            const data = [];
-
-            for (let i = 1; i < lines.length; i++) {
-                // CSV 파싱: 따옴표 안의 쉼표는 무시하도록 정규표현식 사용 (좀 더 견고한 처리)
-                const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
-                if (values.length !== headers.length) continue; 
-
-                let entry = {};
-                headers.forEach((header, index) => {
-                    entry[header] = values[index];
-                });
-                data.push(entry);
-            }
-            return data;
+            // 헤더(첫 줄)를 제외한 데이터만 반환합니다.
+            return lines.slice(1).map(line => {
+                // CSV 파싱: 따옴표 안의 쉼표는 무시하는 정규표현식 사용
+                return line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
+            }).filter(row => row.length > 1); // 유효한 행만 필터링
         }
 
 
@@ -83,39 +71,38 @@
          */
         function renderGallery(data) {
             
-            // 🚨 필터링: URL의 sessionCode와 Google Sheet의 sessionKey 값이 일치하는 항목만 필터링
-            const filteredArtworks = data.filter(item => item[sessionKey] && item[sessionKey].trim() === sessionCode);
+            // 🚨 필터링: 컬럼 인덱스를 사용하여 세션 코드를 비교합니다. (안전)
+            const filteredArtworks = data.filter(row => row[SESSION_CODE_INDEX] && row[SESSION_CODE_INDEX].trim() === sessionCode);
             
             if (filteredArtworks.length === 0) {
-                // 오류 메시지를 좀 더 명확하게 수정
-                gallery.innerHTML = `<p style="text-align: center; color: #ff5722;">😭 **오류:** '${sessionCode}'에 해당하는 작품이 데이터베이스에 없습니다.<br>1. 세션 코드 띄어쓰기(공백)를 확인해주세요.<br>2. Google Sheet의 데이터가 최신 상태인지 확인(재게시)해주세요.</p>`;
+                // 오류 메시지 수정: 문제 발생 가능성을 명시
+                gallery.innerHTML = `<p style="text-align: center; color: #ff5722;">😭 **오류:** '${sessionCode}'에 해당하는 작품이 데이터베이스에 없습니다.<br>1. 세션 코드 **띄어쓰기(공백)**를 확인해주세요.<br>2. Google Sheet의 데이터가 **최신 상태인지 (재게시)** 확인해주세요.</p>`;
                 return;
             }
 
-            filteredArtworks.forEach(art => {
+            filteredArtworks.forEach(row => {
                 const artPiece = document.createElement('div');
                 artPiece.className = 'art-piece';
-                artPiece.style.width = `${frameWidth}px`; // 컨테이너 너비 설정
+                artPiece.style.width = `${frameWidth}px`; 
 
-                // iframe 태그에서 src 주소 추출 (작품 확대 보기에 사용)
-                // iframe 태그는 4열에 저장된 전체 문자열입니다.
-                const iframeFullText = art[iframeKey] || '';
+                // iframe 태그에서 src 주소 추출 
+                const iframeFullText = row[IFRAME_INDEX] || '';
                 const iframeMatch = iframeFullText.match(/src="([^"]+)"/);
                 
                 if (!iframeMatch || !iframeMatch[1]) {
-                    // iframe 태그가 없거나 유효하지 않으면 해당 작품은 건너뛰고 콘솔에 기록
-                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${art[titleKey]}`);
+                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${row[TITLE_INDEX]}`);
                     return; 
                 } 
                 
                 const p5jsSrcUrl = iframeMatch[1];
-                artPiece.dataset.url = p5jsSrcUrl; // 확대 보기를 위해 URL 저장
+                artPiece.dataset.url = p5jsSrcUrl; 
                 
-                // 2-4. 통일된 규격의 iframe HTML 생성 (지연 로드를 위해 src 대신 data-src 사용)
-                const artTitle = art[titleKey] || '제목 없음';
-                const artAuthor = art[authorKey] || '작가 정보 없음';
-                const artDesc = (art[descKey] || '').substring(0, 50); // 설명은 50자만 미리 보기
+                // 렌더링 정보 설정
+                const artTitle = row[TITLE_INDEX] || '제목 없음';
+                const artAuthor = row[AUTHOR_INDEX] || '작가 정보 없음';
+                const artDesc = (row[DESC_INDEX] || '').substring(0, 50); 
                 
+                // HTML 동적 생성
                 const iframeHtml = `
                     <iframe 
                         class="art-frame" 
@@ -127,18 +114,18 @@
                         sandbox="allow-scripts allow-pointer-lock allow-same-origin allow-popups" 
                     ></iframe>
                     <h3>${artTitle}</h3>
-                    <p>작가: ${artAuthor} | ${artDesc}${art[descKey] && art[descKey].length > 50 ? '...' : ''}</p>
+                    <p>작가: ${artAuthor} | ${artDesc}${row[DESC_INDEX] && row[DESC_INDEX].length > 50 ? '...' : ''}</p>
                 `;
 
                 artPiece.innerHTML = iframeHtml;
                 gallery.appendChild(artPiece);
             });
             
-            // 2-5. 지연 로드(Lazy Loading) 및 3-1. 확대 보기 기능 활성화
+            // 지연 로드 및 확대 보기 기능 활성화
             activateFeatures();
         }
         
-        // --- 2-5. 지연 로드(Lazy Loading) 및 3-1. 확대 보기 기능 함수 ---
+        // --- 지연 로드(Lazy Loading) 및 확대 보기 기능 함수 (변경 없음) ---
         function activateFeatures() {
             // 2-5. Intersection Observer 설정 (지연 로드)
             const lazyArtFrames = document.querySelectorAll('.art-frame');
@@ -146,17 +133,15 @@
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         const iframe = entry.target;
-                        // data-src의 값을 src로 이동시켜 로딩 시작
                         if (iframe.dataset.src) {
                             iframe.src = iframe.dataset.src;
                             iframe.removeAttribute('data-src');
                         }
-                        // 한 번 로드된 iframe은 관찰을 멈춥니다.
                         observer.unobserve(iframe);
                     }
                 });
             }, {
-                rootMargin: '0px 0px 200px 0px', // 200px 미리 로드 (사용자 경험 개선)
+                rootMargin: '0px 0px 200px 0px', 
             });
 
             lazyArtFrames.forEach(iframe => {
@@ -167,7 +152,6 @@
             document.querySelectorAll('.art-piece').forEach(piece => {
                 piece.addEventListener('click', function() {
                     const p5jsUrl = this.dataset.url;
-                    // 확대 창 크기는 갤러리 규격보다 크게 설정
                     const popupWidth = Math.min(parseInt(frameWidth) + 300, 1200); 
                     const popupHeight = Math.min(parseInt(frameHeight) + 200, 800);
 
