@@ -154,9 +154,8 @@
             return data;
         }
 
-
         /**
-         * 필터링된 데이터를 갤러리에 렌더링합니다.
+         * 필터링된 데이터를 갤러리에 렌더링합니다. (오류 수정 버전)
          */
         function renderGallery(data) {
             
@@ -164,18 +163,22 @@
             const filteredArtworks = data.filter(item => item[SESSION_CODE_KEY] && item[SESSION_CODE_KEY].trim() === sessionCode);
             
             if (filteredArtworks.length === 0) {
-                // 이 메시지가 뜨면 띄어쓰기 또는 재게시만 확인하면 됩니다.
                 gallery.innerHTML = `<p style="text-align: center; color: #ff5722;">😭 **오류:** '${sessionCode}'에 해당하는 작품이 데이터베이스에 없습니다.<br>1. 세션 코드 띄어쓰기(공백)를 확인해주세요.<br>2. Google Sheet의 데이터가 최신 상태인지 (재게시) 확인해주세요.</p>`;
                 return;
             }
+            
+            // ********* [디버깅 성공 메시지] *********
+            console.log(`--- 필터링 성공: ${filteredArtworks.length}개의 작품 로드 시도 ---`);
+            // *****************************************
 
-            filteredArtworks.forEach(art => {
+            filteredArtworks.forEach(art => { // *수정: art 변수 사용*
                 const artPiece = document.createElement('div');
                 artPiece.className = 'art-piece';
                 artPiece.style.width = `${frameWidth}px`; 
 
-                // iframe 태그에서 src 주소 추출 (인덱스 5, F열)
-                const iframeFullText = row[IFRAME_INDEX] || '';
+                // iframe 태그에서 src 주소 추출 
+                // *수정: IFRAME_KEY를 사용*
+                const iframeFullText = art[IFRAME_KEY] || '';
                 
                 let p5jsSrcUrl = '';
                 
@@ -193,7 +196,7 @@
                     p5jsSrcUrl = cleanIframeText;
                 } else {
                     // 추출 실패: 다음 작품으로 건너뜀
-                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${row[TITLE_INDEX]}. 인덱스 ${IFRAME_INDEX}의 데이터 형태를 확인하세요.`);
+                    console.warn(`[SKIP] 유효한 iframe URL을 찾을 수 없습니다: ${art[TITLE_KEY]}. 제출 데이터 형태를 확인하세요.`);
                     return; 
                 } 
                 
