@@ -136,7 +136,7 @@
          */
         function renderGallery(data) {
             // 🚨 필터링 키: CSV 열 이름은 "수업 세션 코드/이름"과 정확히 일치해야 합니다!
-            const sessionKey = '수업 세션 코드/이름'; 
+            const sessionKey = '해당 수업을 선택하세요.'; 
             const iframeKey = 'p5.js <iframe> 태그';
 
             const filteredArtworks = data.filter(item => item[sessionKey] === sessionCode);
