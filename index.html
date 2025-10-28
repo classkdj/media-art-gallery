@@ -3,110 +3,143 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>미디어 아트 갤러리</title>
+  <title>Media Art Gallery</title>
   <style>
     body {
-      font-family: "Pretendard", sans-serif;
-      background: #fafafa;
-      color: #333;
+      font-family: "Noto Sans KR", sans-serif;
+      background: #f5f5f5;
       margin: 0;
-      padding: 2rem;
+      padding: 20px;
     }
     h1 {
       text-align: center;
-      margin-bottom: 2rem;
+      margin-bottom: 30px;
     }
-    .gallery {
+    #gallery {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-      gap: 1.5rem;
-      max-width: 1200px;
-      margin: 0 auto;
+      grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 20px;
     }
     .card {
       background: white;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-      padding: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      transition: transform 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-4px);
     }
     iframe {
-      width: 100%;
       border: none;
-      border-radius: 8px;
+      width: 100%;
+      height: 400px;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+    .info {
+      padding: 10px 15px;
     }
     .title {
-      font-weight: 600;
-      margin: 0.5rem 0 0.2rem;
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-bottom: 4px;
     }
     .author {
-      font-size: 0.9rem;
       color: #666;
-      margin-bottom: 0.6rem;
+      font-size: 0.9em;
+      margin-bottom: 8px;
     }
     .description {
-      font-size: 0.95rem;
       color: #444;
+      font-size: 0.95em;
+      white-space: pre-wrap;
     }
   </style>
 </head>
+
 <body>
-  <h1>🎨 미디어 아트 갤러리</h1>
-  <div class="gallery" id="gallery"></div>
+  <h1>🎨 Media Art Gallery</h1>
+  <div id="gallery"></div>
 
   <script>
-    // URL 파라미터 가져오기
-    const params = new URLSearchParams(window.location.search);
-    const sheetUrl = params.get("sheet");
-    const width = params.get("width") || 400;
-    const height = params.get("height") || 400;
-    const classCode = params.get("class") || "";
+    const urlParams = new URLSearchParams(window.location.search);
+    const sheetUrl = urlParams.get("sheet");
+    const width = urlParams.get("width") || 400;
+    const height = urlParams.get("height") || 400;
 
-    document.title = `미디어 아트 갤러리 - ${classCode}`;
-
-    // CSV 불러오기
     async function loadCSV(url) {
-      const res = await fetch(url);
-      const text = await res.text();
-      const rows = text.split("\n").map(r => r.split(","));
-      const headers = rows[0].map(h => h.trim());
-      const data = rows.slice(1).map(row => {
+      const response = await fetch(url);
+      const text = await response.text();
+      const [header, ...rows] = text.trim().split("\n");
+      const keys = header.split(",");
+      return rows.map(row => {
+        const values = row.split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/).map(v => v.replace(/^"|"$/g, ""));
         const obj = {};
-        headers.forEach((key, i) => obj[key] = row[i]);
+        keys.forEach((key, i) => obj[key.trim()] = values[i] || "");
         return obj;
       });
-      return data;
     }
 
     function createCard(item) {
       const card = document.createElement("div");
       card.className = "card";
-      const iframeCode = decodeURIComponent(item.iframe_code || "");
-      const iframeHTML = iframeCode.includes("<iframe")
-        ? iframeCode
-        : `<iframe src="${iframeCode}" width="${width}" height="${height}"></iframe>`;
 
-      card.innerHTML = `
-        ${iframeHTML}
+      // iframe 지연 로딩
+      const iframe = document.createElement("iframe");
+      iframe.width = width;
+      iframe.height = height;
+      iframe.loading = "lazy";
+
+      // iframe 코드에서 src 추출
+      const iframeCode = decodeURIComponent(item.iframe_code || "");
+      const srcMatch = iframeCode.match(/src=["']([^"']+)["']/);
+      if (srcMatch) {
+        iframe.dataset.src = srcMatch[1];
+      } else {
+        iframe.dataset.src = iframeCode;
+      }
+
+      card.appendChild(iframe);
+
+      const info = document.createElement("div");
+      info.className = "info";
+      info.innerHTML = `
         <div class="title">${item.title || "무제"}</div>
         <div class="author">by ${item.author || "익명"}</div>
         <div class="description">${item.description || ""}</div>
       `;
+      card.appendChild(info);
+
       return card;
     }
 
     async function renderGallery() {
-      if (!sheetUrl) {
-        document.getElementById("gallery").innerHTML =
-          "<p>⚠️ 구글 시트 CSV 주소(sheet=)가 없습니다.</p>";
-        return;
-      }
       const data = await loadCSV(sheetUrl);
       const gallery = document.getElementById("gallery");
+
       data.forEach(item => {
         if (item.iframe_code?.trim()) {
-          gallery.appendChild(createCard(item));
+          const card = createCard(item);
+          gallery.appendChild(card);
         }
       });
+
+      // Lazy Load 설정
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const iframe = entry.target.querySelector("iframe");
+            if (iframe && iframe.dataset.src && !iframe.src) {
+              iframe.src = iframe.dataset.src;
+              iframe.onload = () => iframe.style.opacity = "1";
+            }
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.1 });
+
+      document.querySelectorAll(".card").forEach(card => observer.observe(card));
     }
 
     renderGallery();
