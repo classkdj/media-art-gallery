@@ -1,271 +1,156 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 미디어아트 융합교육 웹전시 플랫폼</title>
-    <style>
-        /* 1. 기본 스타일 */
-        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
-        header { background-color: #333; color: white; padding: 20px; text-align: center; }
-        .container { max-width: 1200px; margin: 20px auto; padding: 0 20px; }
-        #loading-message { text-align: center; color: #555; padding: 50px; }
-
-        /* 2. 작품 갤러리 그리드 스타일 */
-        #art-gallery {
-            display: flex;
-            flex-wrap: wrap; 
-            justify-content: center; 
-            gap: 25px; 
-            padding: 20px 0;
-        }
-        .art-piece {
-            /* width는 JavaScript에서 frameWidth 값으로 설정됨 */
-            background-color: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-            text-align: center;
-            cursor: pointer; 
-            transition: transform 0.2s;
-        }
-        .art-piece:hover {
-            transform: translateY(-5px); 
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-        }
-        .art-piece h3 { font-size: 1.1em; margin: 10px 0 5px 0; color: #007bff; }
-        .art-piece p { font-size: 0.9em; color: #666; margin: 5px 10px 10px 10px; }
-
-        /* 3. iframe 스타일 (통일된 규격 확보) */
-        .art-frame {
-            border: none;
-            display: block;
-            margin: 0 auto;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Media Art Gallery</title>
+  <style>
+    body {
+      font-family: "Noto Sans KR", sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      text-align: center;
+    }
+    header {
+      background-color: #222;
+      color: white;
+      padding: 15px 0;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin: 0;
+    }
+    #gallery {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      padding: 20px;
+    }
+    .art-piece {
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+      overflow: hidden;
+      transition: transform 0.2s;
+    }
+    .art-piece:hover {
+      transform: scale(1.03);
+    }
+    iframe {
+      border: none;
+      display: block;
+    }
+    h3 {
+      margin: 10px 0 5px;
+      font-size: 1.1rem;
+    }
+    p {
+      margin: 0 0 10px;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    #loadingMessage {
+      margin-top: 30px;
+      font-size: 1.1rem;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-    <header>
-        <h1 id="page-title">AI 미디어아트 웹전시 (로딩 중...)</h1>
-        <p id="class-info">GitHub Pages를 이용한 저비용·고확장 융합교육 전시 플랫폼</p>
-    </header>
+  <header>
+    <h1>🎨 미디어 아트 갤러리</h1>
+  </header>
+  
+  <div id="gallery"></div>
+  <div id="loadingMessage">작품을 불러오는 중입니다...</div>
 
-    <div class="container">
-        <div id="loading-message">작품 데이터를 불러오는 중입니다...</div>
-        <div id="art-gallery">
-            </div>
-    </div>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionCode = urlParams.get('class') || '';
+    const frameWidth = parseInt(urlParams.get('width')) || 400;
+    const frameHeight = parseInt(urlParams.get('height')) || 400;
+    const sheetUrl = urlParams.get('sheet');
+    const gallery = document.getElementById('gallery');
+    const loadingMessage = document.getElementById('loadingMessage');
 
-    <script>
-        // 1. URL 매개변수 읽기
-        const params = new URLSearchParams(window.location.search);
-        const sessionCode = params.get('class');
-        const frameWidth = params.get('width') || 500;
-        const frameHeight = params.get('height') || 400;
-        const sheetCSVUrl = params.get('sheet');
+    if (!sheetUrl) {
+      loadingMessage.innerHTML = '❌ Google Sheet CSV URL이 지정되지 않았습니다.';
+    } else {
+      loadCSV(sheetUrl);
+    }
 
-        const gallery = document.getElementById('art-gallery');
-        const loadingMessage = document.getElementById('loading-message');
+    // ✅ CSV 불러오기
+    async function loadCSV(url) {
+      try {
+        const response = await fetch(url);
+        const csvText = await response.text();
+        const data = parseCSV(csvText);
+        renderGallery(data);
+      } catch (error) {
+        console.error('CSV 로드 실패:', error);
+        loadingMessage.innerHTML = '⚠️ CSV 데이터를 불러오지 못했습니다.';
+      }
+    }
 
-        // ******************* 키 정의 변수 수정 (인덱스 기반) *******************
-                // A=0, B=1, C=2, D=3, E=4, F=5, G=6...
-                const SESSION_CODE_INDEX = 1;  
-                const TITLE_INDEX = 2;         
-                const AUTHOR_INDEX = 3;        
-                const IFRAME_INDEX = 5;        
-                const DESC_INDEX = 6;          
-        // **********************************************************************
+    // ✅ CSV를 객체 배열로 변환
+    function parseCSV(csvText) {
+      const lines = csvText.trim().split('\n').map(line => line.split(','));
+      const headers = lines[0].map(h => h.replace(/"/g, '').trim());
+      const rows = lines.slice(1).map(values => {
+        const entry = {};
+        headers.forEach((header, i) => {
+          entry[header] = (values[i] || '').replace(/"/g, '').trim();
+        });
+        return entry;
+      });
+      return rows;
+    }
 
-        // URL 매개변수 유효성 검사
-        if (!sessionCode || !sheetCSVUrl) {
-            loadingMessage.innerHTML = '⚠️ **오류:** URL에 `class` (세션 코드) 또는 `sheet` (CSV 주소) 매개변수가 누락되었습니다. 교사에게 문의하세요.';
-        } else {
-            document.getElementById('page-title').innerText = `${sessionCode} 작품 전시회`;
-            document.getElementById('class-info').innerText = '클릭하면 작품을 확대하여 감상할 수 있습니다.';
-            loadData(sheetCSVUrl);
+    // ✅ 갤러리 렌더링
+    function renderGallery(data) {
+      // B열(class 코드) 기준 필터
+      const filtered = data.filter(row => row['B'] && row['B'].trim() === sessionCode);
+
+      if (filtered.length === 0) {
+        loadingMessage.innerHTML = '⚠️ 표시할 작품이 없습니다. (class 코드 확인)';
+        return;
+      }
+
+      loadingMessage.remove();
+      console.log(`✅ ${filtered.length}개의 작품 로드 완료`);
+
+      filtered.forEach(row => {
+        const artPiece = document.createElement('div');
+        artPiece.className = 'art-piece';
+        artPiece.style.width = `${frameWidth}px`;
+
+        const p5jsUrl = row['F'] ? row['F'].trim() : '';
+        if (!p5jsUrl.startsWith('http')) {
+          console.warn(`[건너뜀] 잘못된 URL: ${row['C']}`);
+          return;
         }
 
-        /**
-         * Google Sheets CSV 데이터를 불러와서 파싱합니다.
-         */
-        function loadData(url) {
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP 오류! 상태: ${response.status}`);
-                    }
-                    return response.text();
-                })
-                .then(csvText => {
-                    loadingMessage.style.display = 'none';
-                    const artworks = parseCSV(csvText);
-                    renderGallery(artworks);
-                })
-                .catch(error => {
-                    console.error('데이터 로딩 오류:', error);
-                    loadingMessage.innerHTML = '⚠️ **오류:** 작품 데이터 로딩에 실패했습니다. (CSV 주소 또는 네트워크 오류)';
-                });
-        }
+        const title = row['C'] || '제목 없음';
+        const author = row['D'] || '작가 미상';
+        const desc = (row['G'] || '').substring(0, 60);
 
-        /**
-         * CSV 텍스트를 파싱하여 객체 배열로 변환합니다. (안전한 영문 헤더 기준)
-         */
-        function parseCSV(csvText) {
-            const lines = csvText.trim().split('\n');
-            if (lines.length <= 1) return [];
-
-            // 1. 헤더 (첫 줄)를 키로 사용
-            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-            const data = [];
-
-            // 2. 헤더를 기반으로 각 행을 객체로 변환
-            for (let i = 1; i < lines.length; i++) {
-                let currentLine = lines[i];
-                if (currentLine.trim() === '') continue;
-
-                const values = [];
-                let current = '';
-                let inQuote = false;
-                
-                // 복잡한 파싱 로직 (따옴표 처리)
-                for (let j = 0; j < currentLine.length; j++) {
-                    const char = currentLine[j];
-                    if (char === '"') {
-                        inQuote = !inQuote;
-                    } else if (char === ',' && !inQuote) {
-                        values.push(current.trim().replace(/^"|"$/g, ''));
-                        current = '';
-                    } else {
-                        current += char;
-                    }
-                }
-                values.push(current.trim().replace(/^"|"$/g, '')); // 마지막 필드
-
-                if (values.length === headers.length) {
-                    let entry = {};
-                    headers.forEach((header, index) => {
-                        entry[header] = values[index];
-                    });
-                    data.push(entry);
-                } else {
-                    console.warn("CSV 파싱 경고: 헤더와 값의 개수가 일치하지 않는 행이 발견되었습니다.", currentLine);
-                }
-            }
-            return data;
-        }
-
-        /**
-         * 필터링된 데이터를 갤러리에 렌더링합니다. (인덱스 기반 최종 수정)
-         */
-        function renderGallery(data) {
-            
-            // 🚨 필터링: 컬럼 인덱스를 사용하여 세션 코드를 비교합니다.
-            const filteredArtworks = data.filter(row => row[SESSION_CODE_INDEX] && row[SESSION_CODE_INDEX].trim() === sessionCode);
-            
-            if (filteredArtworks.length === 0) {
-                // ... (오류 메시지 유지)
-                return;
-            }
-            
-            // ********* [디버깅 성공 메시지] *********
-            console.log(`--- 필터링 성공: ${filteredArtworks.length}개의 작품 로드 시도 ---`);
-            // *****************************************
-
-            filteredArtworks.forEach(row => { // *수정: art 대신 row 변수 사용 (배열 접근)*
-                const artPiece = document.createElement('div');
-                artPiece.className = 'art-piece';
-                artPiece.style.width = `${frameWidth}px`; 
-
-                // F열(인덱스 5)에 URL만 있다고 가정하고 직접 사용
-                const iframeFullText = row[IFRAME_INDEX] || '';
-                
-                let p5jsSrcUrl = '';
-                
-                // 1. 제출된 텍스트에서 iframe src 주소 추출 시도
-                const cleanIframeText = iframeFullText.trim(); 
-                
-                // --- URL 형태인지 단순 확인 (http 또는 https로 시작하는지) ---
-                if (cleanIframeText.startsWith('http')) {
-                    // 성공: F열의 텍스트가 바로 URL이므로 그대로 사용
-                    p5jsSrcUrl = cleanIframeText;
-                } else {
-                    // 추출 실패: URL이 비어있거나 이상한 값이 들어있음
-                    console.warn(`[SKIP] 유효한 URL을 찾을 수 없습니다: ${row[TITLE_INDEX]}. 학생에게 URL만 제출하도록 안내해주세요.`);
-                    return; 
-                } 
-                
-                // 추출된 최종 URL을 iframe의 data-src로 사용
-                artPiece.dataset.url = p5jsSrcUrl;
-                
-                // 렌더링 정보 설정
-                // *수정: 인덱스를 사용*
-                const artTitle = row[TITLE_INDEX] || '제목 없음';
-                const artAuthor = row[AUTHOR_INDEX] || '작가 정보 없음';
-                const artDesc = (row[DESC_INDEX] || '').substring(0, 50); 
-                
-                // HTML 동적 생성
-                const iframeHtml = `
-                    <iframe 
-                        class="art-frame" 
-                        data-src="${p5jsSrcUrl}" 
-                        width="${frameWidth}" 
-                        height="${frameHeight}" 
-                        frameborder="0"
-                        allowfullscreen 
-                        sandbox="allow-scripts allow-pointer-lock allow-same-origin allow-popups" 
-                    ></iframe>
-                    <h3>${artTitle}</h3>
-                    <p>작가: ${artAuthor} | ${artDesc}${row[DESC_INDEX] && row[DESC_INDEX].length > 50 ? '...' : ''}</p>
-                `;
-
-                artPiece.innerHTML = iframeHtml;
-                gallery.appendChild(artPiece);
-            });
-            
-            // 지연 로드 및 확대 보기 기능 활성화
-            activateFeatures();
-        }
-        
-        // --- 지연 로드(Lazy Loading) 및 확대 보기 기능 함수 (변경 없음) ---
-        function activateFeatures() {
-            // ... (기능 유지)
-            const lazyArtFrames = document.querySelectorAll('.art-frame');
-            const observer = new IntersectionObserver((entries, observer) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const iframe = entry.target;
-                        if (iframe.dataset.src) {
-                            iframe.src = iframe.dataset.src;
-                            iframe.removeAttribute('data-src');
-                        }
-                        observer.unobserve(iframe);
-                    }
-                });
-            }, {
-                rootMargin: '0px 0px 200px 0px', 
-            });
-
-            lazyArtFrames.forEach(iframe => {
-                observer.observe(iframe);
-            });
-
-            document.querySelectorAll('.art-piece').forEach(piece => {
-                piece.addEventListener('click', function() {
-                    const p5jsUrl = this.dataset.url;
-                    const popupWidth = Math.min(parseInt(frameWidth) + 300, 1200); 
-                    const popupHeight = Math.min(parseInt(frameHeight) + 200, 800);
-
-                    if (p5jsUrl) {
-                        window.open(
-                            p5jsUrl, 
-                            '_blank', 
-                            `width=${popupWidth},height=${popupHeight},scrollbars=yes,resizable=yes`
-                        );
-                    }
-                });
-            });
-        }
-    </script>
+        artPiece.innerHTML = `
+          <iframe
+            src="${p5jsUrl}"
+            width="${frameWidth}"
+            height="${frameHeight}"
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin"
+          ></iframe>
+          <h3>${title}</h3>
+          <p>👤 ${author} | ${desc}${row['G'] && row['G'].length > 60 ? '...' : ''}</p>
+        `;
+        gallery.appendChild(artPiece);
+      });
+    }
+  </script>
 </body>
 </html>
