@@ -85,7 +85,6 @@
       const card = document.createElement("div");
       card.className = "card";
 
-      // iframe 지연 로딩
       const iframe = document.createElement("iframe");
       iframe.width = width;
       iframe.height = height;
@@ -94,11 +93,14 @@
       // iframe 코드에서 src 추출
       const iframeCode = decodeURIComponent(item.iframe_code || "");
       const srcMatch = iframeCode.match(/src=["']([^"']+)["']/);
-      if (srcMatch) {
-        iframe.dataset.src = srcMatch[1];
-      } else {
-        iframe.dataset.src = iframeCode;
-      }
+      let src = srcMatch ? srcMatch[1] : iframeCode;
+
+      // 🔧 링크 수정 부분
+      src = src
+        .replace("/embed/", "/full/")
+        .replace("/sketches/", "/full/");
+
+      iframe.dataset.src = src;
 
       card.appendChild(iframe);
 
